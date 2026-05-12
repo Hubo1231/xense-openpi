@@ -723,8 +723,8 @@ _CONFIGS = [
     TrainConfig(
         name="pi05_base_bi_flexiv_assemble_box_with_phone_stand_lora_0430_merged_fixed_h100",
         model=pi0_config.Pi0Config(
-            paligemma_variant="gemma_2b",
-            action_expert_variant="gemma_300m",
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
             pi05=True,
             enable_training_time_rtc=True,
             max_delay=10,
@@ -738,11 +738,11 @@ _CONFIGS = [
             ),
         ),
         ema_decay=None,
-        batch_size=256,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=64,
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/li/hubo/xense-openpi/model/pi05_base"),
         num_train_steps=80000,
-        num_workers=64,
-        fsdp_devices=8,
+        num_workers=2,
+        fsdp_devices=1,
     ),
     TrainConfig(
         name="pi05_base_bi_flexiv_assemble_box_with_phone_stand_lora_0422_merged_fixed_h100",
