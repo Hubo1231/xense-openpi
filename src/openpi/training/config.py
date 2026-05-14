@@ -821,7 +821,7 @@ _CONFIGS = [
         data=LeRobotBiFlexivDataConfig(
             repo_id="Xense/earbuds_case_assembly_with_lid_operation",
             use_delta_cartesian_actions=True,
-            default_prompt="Pick up the earbuds from the acrylic plate, open the charging case, precisely align and gently insert the earbuds using contact feedback, then close the lid securely",
+            default_prompt="Pick up each earbud case from the left stands, insert the matching earbuds, close the lid, and place the case on the middle stand",
             base_config=DataConfig(
                 prompt_from_task=True,  # Set to True for prompt by task_name
             ),
