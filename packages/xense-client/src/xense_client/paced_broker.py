@@ -49,6 +49,17 @@ class PacedBroker(_base_policy.BasePolicy):
         queue_size: Max actions buffered between producer and consumer.
             Should be >= action_hz * worst_case_infer_block_seconds to avoid
             consumer stalls (e.g. 50 covers a 0.8 s websocket stall at 60 Hz).
+        target_hz: If > 0, the producer sleeps after each iteration to cap its
+            call rate at this value. Set this to the consumer (action thread)
+            rate. Without it, the producer runs flat-out: harmless when the
+            inner broker has no internal state (queue.put back-pressure
+            eventually paces it), but harmful when the inner broker maintains
+            its own queue — notably RTCActionChunkBroker. There, an unpaced
+            producer drains RTC's 50-action buffer in milliseconds during
+            startup, faster than RTC's background inference can refill,
+            triggering "Action queue exhausted" warning spam at ~200 Hz.
+            Setting target_hz=action_hz keeps RTC's internal queue at a
+            healthy fill level.
         producer_idle_sleep: Seconds to sleep when no obs has been submitted
             yet, before retrying. Tiny; just prevents a tight spin at startup.
     """
@@ -57,10 +68,12 @@ class PacedBroker(_base_policy.BasePolicy):
         self,
         inner: _base_policy.BasePolicy,
         queue_size: int = 50,
+        target_hz: float = 0.0,
         producer_idle_sleep: float = 0.005,
     ) -> None:
         self._inner = inner
         self._action_queue: "queue.Queue[Dict]" = queue.Queue(maxsize=queue_size)
+        self._target_hz = target_hz
 
         # Single-slot latest obs; producer always reads the freshest one.
         self._latest_obs: Optional[Dict] = None
@@ -127,7 +140,10 @@ class PacedBroker(_base_policy.BasePolicy):
             target=self._producer_loop, name="PacedBroker-producer", daemon=True
         )
         self._producer_thread.start()
-        logger.info(f"PacedBroker producer thread started (queue_size={self._action_queue.maxsize})")
+        rate_msg = f", target_hz={self._target_hz}" if self._target_hz > 0 else " (unpaced)"
+        logger.info(
+            f"PacedBroker producer thread started (queue_size={self._action_queue.maxsize}{rate_msg})"
+        )
 
     def stop(self, join_timeout: float = 2.0) -> None:
         """Signal producer to exit and wait for it. Safe to call multiple times."""
@@ -147,6 +163,8 @@ class PacedBroker(_base_policy.BasePolicy):
     # Producer thread body
     # ------------------------------------------------------------------
     def _producer_loop(self) -> None:
+        period = 1.0 / self._target_hz if self._target_hz > 0 else 0.0
+        next_tick = time.time()
         while not self._stop_event.is_set():
             # Wait until we have at least one obs to feed the inner broker.
             if not self._obs_event.wait(timeout=0.5):
@@ -176,3 +194,18 @@ class PacedBroker(_base_policy.BasePolicy):
                     break
                 except queue.Full:
                     continue
+
+            # Rate cap: keep producer at ≤ target_hz. Critical when the inner
+            # broker has its own internal queue (RTC): without this, the
+            # producer empties RTC's buffer during startup faster than RTC's
+            # bg inference can refill, causing repeated "queue empty" warnings.
+            if period > 0:
+                next_tick += period
+                sleep_for = next_tick - time.time()
+                if sleep_for > 0:
+                    time.sleep(sleep_for)
+                else:
+                    # We're behind schedule (inner.infer + put took longer
+                    # than period). Don't try to catch up by bursting — reset
+                    # the schedule from now so future ticks are paced again.
+                    next_tick = time.time()

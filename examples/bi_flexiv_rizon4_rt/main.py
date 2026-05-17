@@ -297,9 +297,17 @@ def main(args: Args) -> None:
         # Wrap whichever broker we just built; the PacedBroker presents the
         # same BasePolicy contract to anything else but adds submit_obs /
         # pop_action / start / stop for DecoupledRuntime.
+        #
+        # target_hz=action_hz throttles the producer to the consumer rate.
+        # Without it, the producer drains an internal broker queue (RTC has
+        # one) faster than its background inference can refill, generating
+        # "Action queue exhausted" warning spam during startup. For non-RTC
+        # the queue.put back-pressure already paces things, but matching the
+        # consumer rate is still the right default.
         policy = _paced_broker.PacedBroker(
             inner=policy,
             queue_size=args.paced_queue_size,
+            target_hz=args.action_hz,
         )
 
     intervention_controller: _intervention.Pico4InterventionController | None = None

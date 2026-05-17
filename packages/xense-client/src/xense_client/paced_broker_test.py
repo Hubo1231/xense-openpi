@@ -44,6 +44,47 @@ class FlakyPolicy(base_policy.BasePolicy):
         return {"actions": obs["step"]}
 
 
+class FakeInternalQueueBroker(base_policy.BasePolicy):
+    """Mimics RTCActionChunkBroker: holds an internal queue refilled by a
+    background thread; .infer() pops one. If the queue is empty, returns a
+    sentinel and increments an "exhaust" counter — that's what the real
+    ActionQueue logs the warning for.
+    """
+
+    def __init__(self, initial_size: int = 50, refill_period_s: float = 0.4):
+        import collections
+        self._q: "collections.deque" = collections.deque()
+        for _ in range(initial_size):
+            self._q.append({"actions": 0})
+        self._lock = threading.Lock()
+        self._refill_period_s = refill_period_s
+        self._refill_size = initial_size
+        self._exhausted_count = 0
+        self._stop = threading.Event()
+        self._bg = threading.Thread(target=self._refill_loop, daemon=True)
+        self._bg.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _refill_loop(self):
+        while not self._stop.is_set():
+            time.sleep(self._refill_period_s)
+            with self._lock:
+                if len(self._q) <= self._refill_size // 2:
+                    for _ in range(self._refill_size - len(self._q)):
+                        self._q.append({"actions": 0})
+
+    def infer(self, obs: Dict) -> Dict:
+        with self._lock:
+            if not self._q:
+                self._exhausted_count += 1
+                # Return a sentinel rather than block, matching the behavior
+                # of RTCActionChunkBroker (which busy-polls and warns).
+                return {"actions": -1}
+            return self._q.popleft()
+
+
 # ---------------------------------------------------------------------------
 # T1: basic produce-consume
 # ---------------------------------------------------------------------------
@@ -207,6 +248,79 @@ def test_stop_before_start_is_safe():
     inner = FakePolicy()
     pb = PacedBroker(inner=inner, queue_size=5)
     pb.stop()  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# T9: target_hz caps the producer rate
+# ---------------------------------------------------------------------------
+def test_target_hz_caps_producer_rate():
+    inner = FakePolicy()
+    pb = PacedBroker(inner=inner, queue_size=1000, target_hz=30.0)
+    pb.submit_obs({"step": 0})
+    pb.start()
+    # Run for ~1 s. Producer rate cap is 30 Hz, so call count should be
+    # ~30 (±25 % for scheduling jitter).
+    time.sleep(1.0)
+    pb.stop()
+    n_calls = len(inner.calls)
+    assert (
+        25 <= n_calls <= 40
+    ), f"target_hz=30 expected ~30 calls/s, got {n_calls}"
+
+
+# ---------------------------------------------------------------------------
+# T10: target_hz=0 leaves the producer unpaced (consumer-bound by put queue)
+# ---------------------------------------------------------------------------
+def test_target_hz_zero_means_unpaced():
+    inner = FakePolicy()
+    pb = PacedBroker(inner=inner, queue_size=5, target_hz=0.0)
+    pb.submit_obs({"step": 0})
+    pb.start()
+    # No rate cap, but queue.put back-pressure (size=5) caps the producer
+    # once the queue is full. Without a consumer, producer fills the queue
+    # quickly then blocks. We should see ≥ queue_size calls in a short window.
+    time.sleep(0.2)
+    pb.stop()
+    assert len(inner.calls) >= 5
+
+
+# ---------------------------------------------------------------------------
+# T11: regression — target_hz prevents draining an inner broker's queue
+# ---------------------------------------------------------------------------
+def test_target_hz_protects_inner_queue_from_drain():
+    """Replays the bug observed in session_20260517_202348.log.
+
+    Without rate-capping, PacedBroker drained RTCActionChunkBroker's 50-action
+    internal queue in milliseconds, faster than its background inference could
+    refill, triggering hundreds of 'Action queue exhausted' warnings.
+
+    Here the FakeInternalQueueBroker stands in for RTC. We verify that with
+    target_hz set, the inner queue is NOT exhausted; without it, the inner
+    queue gets drained and the exhaust counter climbs.
+    """
+    # --- bad: no rate cap ---
+    inner_bad = FakeInternalQueueBroker(initial_size=50, refill_period_s=0.4)
+    pb_bad = PacedBroker(inner=inner_bad, queue_size=50, target_hz=0.0)
+    pb_bad.submit_obs({"step": 0})
+    pb_bad.start()
+    time.sleep(0.5)
+    pb_bad.stop()
+    inner_bad.stop()
+    assert (
+        inner_bad._exhausted_count > 0
+    ), "unpaced producer should drain inner queue (got no exhausts — test setup wrong?)"
+
+    # --- good: rate cap matches consumer ---
+    inner_good = FakeInternalQueueBroker(initial_size=50, refill_period_s=0.4)
+    pb_good = PacedBroker(inner=inner_good, queue_size=50, target_hz=30.0)
+    pb_good.submit_obs({"step": 0})
+    pb_good.start()
+    time.sleep(0.5)
+    pb_good.stop()
+    inner_good.stop()
+    assert (
+        inner_good._exhausted_count == 0
+    ), f"paced producer should not exhaust inner queue, got {inner_good._exhausted_count} exhausts"
 
 
 if __name__ == "__main__":
