@@ -905,15 +905,57 @@ if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
 _CONFIGS_DICT = {config.name: config for config in _CONFIGS}
 
 
+# YAML lookup paths, in priority order. First match wins.
+# - configs/<name>.yaml         per-user, gitignored, for your in-flight experiments
+# - configs/_examples/<name>.yaml  checked into git, canonical examples for the team
+_YAML_SEARCH_DIRS: tuple[pathlib.Path, ...] = (
+    pathlib.Path("configs"),
+    pathlib.Path("configs") / "_examples",
+)
+
+
+def _find_yaml_config(config_name: str) -> pathlib.Path | None:
+    """Look for configs/<name>.yaml first, then configs/_examples/<name>.yaml."""
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    for relative in _YAML_SEARCH_DIRS:
+        candidate = repo_root / relative / f"{config_name}.yaml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _known_config_names() -> list[str]:
+    """All names available via either _CONFIGS or YAML files. For 'did you mean' hints."""
+    names = set(_CONFIGS_DICT.keys())
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    for relative in _YAML_SEARCH_DIRS:
+        directory = repo_root / relative
+        if directory.is_dir():
+            names.update(p.stem for p in directory.glob("*.yaml"))
+    return sorted(names)
+
+
 def cli() -> TrainConfig:
     return tyro.extras.overridable_config_cli({k: (k, v) for k, v in _CONFIGS_DICT.items()})
 
 
 def get_config(config_name: str) -> TrainConfig:
-    """Get a config by name."""
-    if config_name not in _CONFIGS_DICT:
-        closest = difflib.get_close_matches(config_name, _CONFIGS_DICT.keys(), n=1, cutoff=0.0)
-        closest_str = f" Did you mean '{closest[0]}'? " if closest else ""
-        raise ValueError(f"Config '{config_name}' not found.{closest_str}")
+    """Get a config by name.
 
-    return _CONFIGS_DICT[config_name]
+    Lookup order:
+      1. configs/<name>.yaml          (per-user, gitignored)
+      2. configs/_examples/<name>.yaml (shared examples in git)
+      3. _CONFIGS_DICT[name]           (legacy Python registry)
+    """
+    yaml_path = _find_yaml_config(config_name)
+    if yaml_path is not None:
+        import openpi.training.yaml_loader as _yaml_loader  # noqa: PLC0415
+
+        return _yaml_loader.load(yaml_path)
+
+    if config_name in _CONFIGS_DICT:
+        return _CONFIGS_DICT[config_name]
+
+    closest = difflib.get_close_matches(config_name, _known_config_names(), n=1, cutoff=0.0)
+    closest_str = f" Did you mean '{closest[0]}'? " if closest else ""
+    raise ValueError(f"Config '{config_name}' not found.{closest_str}")
