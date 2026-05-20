@@ -3,9 +3,9 @@
 import einops
 from lerobot.utils.robot_utils import get_logger
 import numpy as np
+from typing_extensions import override
 from xense_client import image_tools
 from xense_client.runtime import environment as _environment
-from typing_extensions import override
 
 import examples.bi_flexiv_rizon4_rt.real_env as _real_env
 
@@ -13,9 +13,26 @@ logger = get_logger("BiFlexivRizon4RTEnv")
 
 # Action dimension labels for debug logging (20D Cartesian)
 _ACTION_LABELS = [
-    "L.x", "L.y", "L.z", "L.r1", "L.r2", "L.r3", "L.r4", "L.r5", "L.r6",
-    "R.x", "R.y", "R.z", "R.r1", "R.r2", "R.r3", "R.r4", "R.r5", "R.r6",
-    "L.grip", "R.grip",
+    "L.x",
+    "L.y",
+    "L.z",
+    "L.r1",
+    "L.r2",
+    "L.r3",
+    "L.r4",
+    "L.r5",
+    "L.r6",
+    "R.x",
+    "R.y",
+    "R.z",
+    "R.r1",
+    "R.r2",
+    "R.r3",
+    "R.r4",
+    "R.r5",
+    "R.r6",
+    "L.grip",
+    "R.grip",
 ]
 
 
@@ -98,8 +115,7 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
         # Raw images (original resolution HWC) passed through for recording.
         # Policy cameras only — tactile sensors excluded.
         raw_images = {
-            cam: img for cam, img in raw_obs["images"].items()
-            if "_depth" not in cam and "tactile" not in cam
+            cam: img for cam, img in raw_obs["images"].items() if "_depth" not in cam and "tactile" not in cam
         }
 
         return {
@@ -113,7 +129,7 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
         self._step_count += 1
         actions = action.get("actions")
         if actions is not None:
-            parts = " | ".join(f"{l}={v:+.4f}" for l, v in zip(_ACTION_LABELS, actions))
+            parts = " | ".join(f"{lbl}={v:+.4f}" for lbl, v in zip(_ACTION_LABELS, actions))
             logger.debug(f"Step {self._step_count}: {parts}")
         # Pure send — no observation read. The outer loop owns obs scheduling.
         self._env.send_action(action["actions"])

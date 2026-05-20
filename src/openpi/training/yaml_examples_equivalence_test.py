@@ -18,7 +18,6 @@ import pytest
 import openpi.training.config as _config
 import openpi.training.yaml_loader as _yaml_loader
 
-
 _EXAMPLES_DIR = pathlib.Path(__file__).resolve().parents[3] / "configs" / "_examples"
 
 
@@ -36,11 +35,11 @@ def _yaml_files() -> list[pathlib.Path]:
 @pytest.mark.parametrize("yaml_path", _yaml_files(), ids=lambda p: p.stem)
 def test_yaml_matches_configs_dict(yaml_path: pathlib.Path):
     name = yaml_path.stem
-    assert name in _config._CONFIGS_DICT, (  # noqa: SLF001
+    assert name in _config._CONFIGS_DICT, (
         f"{name}.yaml exists in configs/_examples/ but no _CONFIGS entry has that name. "
         "Either delete the stale YAML or add a matching _CONFIGS entry."
     )
-    expected = _config._CONFIGS_DICT[name]  # noqa: SLF001
+    expected = _config._CONFIGS_DICT[name]
     loaded = _yaml_loader.load(yaml_path)
     assert loaded == expected, (
         f"YAML config '{name}' does not match the corresponding _CONFIGS entry. "

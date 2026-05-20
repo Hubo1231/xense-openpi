@@ -106,9 +106,7 @@ def test_action_rate_matches_action_hz():
         num_episodes=1,
         max_episode_steps=0,
     )
-    t0 = time.time()
     runtime.run()
-    elapsed = time.time() - t0
 
     # Episode completed → 60 actions applied.
     assert len(env.applied_actions) >= 60, f"only {len(env.applied_actions)} actions"
@@ -118,17 +116,13 @@ def test_action_rate_matches_action_hz():
     duration = ts[-1] - ts[0]
     rate = (len(ts) - 1) / duration
     expected = 60.0
-    assert (
-        abs(rate - expected) / expected < _RATE_TOL
-    ), f"action rate {rate:.1f} Hz, expected ~{expected} Hz"
+    assert abs(rate - expected) / expected < _RATE_TOL, f"action rate {rate:.1f} Hz, expected ~{expected} Hz"
 
     # Obs rate should be ~30 Hz (camera-bound).
     obs_ts = env._obs_timestamps[2:-2]
     obs_duration = obs_ts[-1] - obs_ts[0]
     obs_rate = (len(obs_ts) - 1) / obs_duration
-    assert (
-        abs(obs_rate - 30.0) / 30.0 < _RATE_TOL
-    ), f"obs rate {obs_rate:.1f} Hz, expected ~30 Hz"
+    assert abs(obs_rate - 30.0) / 30.0 < _RATE_TOL, f"obs rate {obs_rate:.1f} Hz, expected ~30 Hz"
 
     # Sanity: action rate is meaningfully faster than obs rate.
     assert rate > obs_rate * 1.5, f"action_rate={rate:.1f}, obs_rate={obs_rate:.1f}"
@@ -159,9 +153,7 @@ def test_subscriber_pairs_action_with_latest_obs():
     # Subscriber records every action it sees; we just want overlap, not
     # exact equality (subscriber may have skipped the very last action that
     # triggered episode complete before the on_step call).
-    assert recorded_values.issubset(applied_values) or len(
-        recorded_values & applied_values
-    ) >= len(sub.steps) - 1
+    assert recorded_values.issubset(applied_values) or len(recorded_values & applied_values) >= len(sub.steps) - 1
 
 
 # ---------------------------------------------------------------------------
@@ -273,15 +265,13 @@ def test_request_stop_ends_run_promptly():
     finished = done.wait(timeout=2.0)
     elapsed = time.time() - t0
 
-    assert finished, f"runtime.run() did not return within 2 s after request_stop"
+    assert finished, "runtime.run() did not return within 2 s after request_stop"
     assert elapsed < 2.0, f"shutdown took {elapsed:.2f}s"
 
     # Only the first episode should have run — the next two were skipped.
     # FakeEnv's reset is called once per started episode + once for the
     # final env reset in run(), so total resets == 1 + 1 = 2.
-    assert env._reset_count == 2, (
-        f"expected 1 episode + 1 final reset = 2 env resets, got {env._reset_count}"
-    )
+    assert env._reset_count == 2, f"expected 1 episode + 1 final reset = 2 env resets, got {env._reset_count}"
 
 
 if __name__ == "__main__":

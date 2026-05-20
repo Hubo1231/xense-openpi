@@ -24,7 +24,7 @@ def migrate(output_dir: pathlib.Path, overwrite: bool) -> tuple[list[str], list[
     written: list[str] = []
     skipped: list[tuple[str, str]] = []  # (name, reason)
 
-    for cfg in _config._CONFIGS:  # noqa: SLF001
+    for cfg in _config._CONFIGS:
         target = output_dir / f"{cfg.name}.yaml"
         if target.exists() and not overwrite:
             skipped.append((cfg.name, f"exists, skipping (use --overwrite to replace): {target}"))
@@ -38,7 +38,7 @@ def migrate(output_dir: pathlib.Path, overwrite: bool) -> tuple[list[str], list[
         # Sanity check: re-parse and compare against the original.
         try:
             reloaded = _yaml_loader.loads(yaml_text, name=cfg.name)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             skipped.append((cfg.name, f"reload failed: {exc!r}"))
             continue
         if reloaded != cfg:
@@ -68,7 +68,7 @@ def main() -> None:
 
     written, skipped = migrate(args.output_dir, args.overwrite)
 
-    print(f"\n=== migration summary ===")
+    print("\n=== migration summary ===")
     print(f"wrote {len(written)} YAML file(s) to {args.output_dir}")
     for name in written:
         print(f"  + {name}.yaml")

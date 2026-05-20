@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pathlib
-import tempfile
 
 import pytest
 
@@ -148,7 +147,7 @@ def test_round_trip_dump_then_load():
     """Take an in-memory TrainConfig, dump it to YAML, parse it back, compare."""
     original = _config.TrainConfig(
         name="round_trip_demo",
-        model=_config._CONFIGS_DICT["debug_pi05"].model,  # noqa: SLF001
+        model=_config._CONFIGS_DICT["debug_pi05"].model,
         data=_config.FakeDataConfig(),
         batch_size=2,
         num_train_steps=10,

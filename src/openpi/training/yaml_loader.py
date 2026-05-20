@@ -42,7 +42,6 @@ from omegaconf import OmegaConf
 
 import openpi.training.registry as _registry
 
-
 _CONFIG_FIELD_TO_REGISTRY: dict[str, str] = {
     "model": "MODELS",
     "data": "DATA_CONFIGS",
@@ -56,7 +55,7 @@ _CONFIG_FIELD_TO_REGISTRY: dict[str, str] = {
 _PROMPT_FROM_TASK_KEY = "prompt_from_task"
 
 
-def load(yaml_path: pathlib.Path | str) -> "TrainConfig":  # noqa: F821  (forward ref)
+def load(yaml_path: pathlib.Path | str) -> TrainConfig:  # noqa: F821  (forward ref)
     """Load a TrainConfig from a YAML file. The file stem becomes the config name."""
     path = pathlib.Path(yaml_path).expanduser().resolve()
     if not path.is_file():
@@ -70,7 +69,7 @@ def load(yaml_path: pathlib.Path | str) -> "TrainConfig":  # noqa: F821  (forwar
     return _build_train_config(name, raw)
 
 
-def loads(yaml_text: str, name: str) -> "TrainConfig":  # noqa: F821
+def loads(yaml_text: str, name: str) -> TrainConfig:  # noqa: F821
     """Load a TrainConfig from a YAML string. Caller supplies the name."""
     raw = OmegaConf.to_container(OmegaConf.create(yaml_text), resolve=True)
     if not isinstance(raw, dict):
@@ -78,12 +77,12 @@ def loads(yaml_text: str, name: str) -> "TrainConfig":  # noqa: F821
     return _build_train_config(name, raw)
 
 
-def _build_train_config(name: str, raw: dict[str, Any]) -> "TrainConfig":  # noqa: F821
+def _build_train_config(name: str, raw: dict[str, Any]) -> TrainConfig:  # noqa: F821
     # Import here to avoid circular import (config.py imports registry, registry imports
     # config.py lazily, and yaml_loader is called from config.py).
-    import openpi.training.config as _config  # noqa: PLC0415
+    import openpi.training.config as _config
 
-    _registry._populate_data_configs()  # noqa: SLF001
+    _registry._populate_data_configs()
 
     kwargs: dict[str, Any] = {"name": name}
 
@@ -146,14 +145,14 @@ def _build_polymorphic(field_name: str, spec: Any) -> Any:
     # Data configs may carry a nested `base_config: DataConfig` mapping that is not
     # polymorphic - construct it directly.
     if field_name == "data" and "base_config" in body and isinstance(body["base_config"], dict):
-        import openpi.training.config as _config  # noqa: PLC0415
+        import openpi.training.config as _config
 
         body["base_config"] = _config.DataConfig(**body["base_config"])
 
     return cls(**body)
 
 
-def dump(config: "TrainConfig", yaml_path: pathlib.Path | str | None = None) -> str:  # noqa: F821
+def dump(config: TrainConfig, yaml_path: pathlib.Path | str | None = None) -> str:  # noqa: F821
     """Serialize a TrainConfig back to YAML. Used by the one-shot migration script.
 
     Returns the YAML text; if `yaml_path` is given, also writes to disk.
@@ -173,12 +172,12 @@ def _train_config_to_dict(config: Any) -> dict[str, Any]:
     Fields that don't equal the default and aren't serializable raise loudly - that
     config is incompatible with YAML and must stay in _CONFIGS.
     """
-    import openpi.training.config as _config  # noqa: PLC0415
+    import openpi.training.config as _config
 
     known_classes = _registry.all_known_classes()
     defaults = _config.TrainConfig(name="__defaults__")
 
-    import tyro  # noqa: PLC0415
+    import tyro
 
     out: dict[str, Any] = {}
     for f in dataclasses.fields(config):
@@ -214,11 +213,11 @@ def _equal_for_yaml(a: Any, b: Any) -> bool:
     Catches uncooperative types (no __eq__ / unhashable) by falling back to repr.
     """
     try:
-        return bool(a == b) or type(a) is type(b) and repr(a) == repr(b)
-    except Exception:  # noqa: BLE001 - defensive comparison fallback
+        return bool(a == b) or (type(a) is type(b) and repr(a) == repr(b))
+    except Exception:
         try:
             return repr(a) == repr(b)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
 
 
@@ -229,7 +228,7 @@ def _dataclass_to_yaml_dict(obj: Any, known_classes: dict[type, str]) -> dict[st
     tyro.MISSING sentinels are skipped (treated as 'unset, user provides on CLI').
     Fields that can't be serialized AND don't equal default raise loudly.
     """
-    import tyro  # noqa: PLC0415  (local to keep startup light)
+    import tyro
 
     cls = type(obj)
     type_name = known_classes.get(cls)

@@ -9,14 +9,11 @@ or other non-serializable values (e.g. SimpleDataConfig used by pi0_droid)
 are intentionally not registered and remain Python-only via _CONFIGS.
 """
 
-from typing import Any
-
 import openpi.models.pi0_config as _pi0_config
 import openpi.models.pi0_fast as _pi0_fast
 import openpi.models.pi0_tactile_config as _pi0_tactile_config
 import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as _weight_loaders
-
 
 # Model configs (TrainConfig.model)
 MODELS: dict[str, type] = {
@@ -55,10 +52,9 @@ DATA_CONFIGS: dict[str, type] = {}
 
 def _populate_data_configs() -> None:
     """Lazy import of data config classes to break circular import with config.py."""
-    global DATA_CONFIGS
     if DATA_CONFIGS:
         return
-    import openpi.training.config as _config  # noqa: PLC0415  (intentional lazy import)
+    import openpi.training.config as _config
 
     DATA_CONFIGS.update(
         {
@@ -105,8 +101,4 @@ def class_to_type_name(cls: type) -> str | None:
 
 def all_known_classes() -> dict[type, str]:
     """All registered classes mapped to their type-name (for serialization)."""
-    out: dict[type, str] = {}
-    for registry in all_registries().values():
-        for name, klass in registry.items():
-            out[klass] = name
-    return out
+    return {klass: name for registry in all_registries().values() for name, klass in registry.items()}
