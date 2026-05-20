@@ -135,11 +135,90 @@ For training, we use the LeRobot dataset format. You can convert your own data t
 
 ### 2. Defining training configs and running training
 
-To fine-tune a base model on your own data, you need to define configs for data processing and training. We provide example configs with detailed comments for DROID and Xense platforms in [`config.py`](src/openpi/training/config.py), which you can modify for your own dataset:
+A training config can be defined in **two ways**, both resolved by name through `get_config(name)`:
+
+1. **YAML (preferred for new tasks)** — one file per task in `configs/`. Per-user
+   configs in `configs/<name>.yaml` are gitignored; shared templates live in
+   `configs/_examples/<name>.yaml`. See [`configs/README.md`](configs/README.md) for
+   the schema and [`docs/yaml_config_changelog.md`](docs/yaml_config_changelog.md)
+   for design notes.
+2. **Python `_CONFIGS` list in [`config.py`](src/openpi/training/config.py)** —
+   used by legacy entries that can't round-trip through YAML (`pi0_droid`, LoRA
+   configs with `flax.nnx` freeze filters, etc.). New tasks should prefer YAML to
+   avoid merge conflicts in this central file.
+
+Lookup order: `configs/<name>.yaml` → `configs/_examples/<name>.yaml` → `_CONFIGS_DICT[name]`. First match wins.
+
+Shared building blocks (used by both modes):
 
 - Data transforms: Define the data mapping from your environment to the model (see [`droid_policy.py`](src/openpi/policies/droid_policy.py) or [`xense_flare_policy.py`](src/openpi/policies/xense_flare_policy.py) for examples)
 - `DataConfig`: Defines how to process raw data from LeRobot dataset for training
 - `TrainConfig`: Defines fine-tuning hyperparameters, data config, and weight loader
+
+#### Defining a new training config in YAML
+
+Copy the closest example from `configs/_examples/` and edit it. For a personal
+in-flight experiment, put the new file directly under `configs/` (it will be
+gitignored). For something you want to share with the team, put it under
+`configs/_examples/` and open a PR.
+
+```yaml
+# configs/my_task.yaml  (filename stem = config name; do not put `name:` inside)
+
+model:
+  type: Pi0Config              # registered in src/openpi/training/registry.py
+  pi05: true
+  paligemma_variant: gemma_2b
+  action_expert_variant: gemma_300m
+  enable_training_time_rtc: true
+  max_delay: 10
+
+data:
+  type: LeRobotBiFlexivDataConfig
+  repo_id: Xense/<your_dataset>
+  use_delta_cartesian_actions: true
+  default_prompt: "Describe the task here."
+  base_config:
+    prompt_from_task: true
+
+weight_loader:
+  type: CheckpointWeightLoader
+  params_path: gs://openpi-assets/checkpoints/pi05_base/params
+
+batch_size: 256
+num_train_steps: 40000
+num_workers: 64
+fsdp_devices: 8
+```
+
+Then use it exactly like any other config:
+
+```bash
+uv run scripts/compute_norm_stats.py --config-name my_task
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py my_task --exp-name=run_0520 --overwrite
+uv run scripts/serve_policy.py policy:checkpoint --policy.config=my_task --policy.dir=checkpoints/my_task/run_0520/<step>
+```
+
+⚠️ Before committing a YAML into `configs/_examples/`, scrub any machine-local
+absolute paths from `weight_loader.params_path` (e.g. `/home/<you>/...`). Use
+upstream URLs (`gs://openpi-assets/...`) or paths that every contributor can
+resolve.
+
+If you need to add a brand-new model class or data factory, register its string
+name in [`src/openpi/training/registry.py`](src/openpi/training/registry.py)
+first — then any YAML can reference it via `type: <YourClass>`.
+
+#### Updating shared examples after editing `config.py`
+
+If you changed something in `_CONFIGS` that has a corresponding YAML in
+`configs/_examples/`, regenerate the YAMLs and re-run the equivalence test:
+
+```bash
+python scripts/migrate_configs_to_yaml.py --overwrite
+pytest src/openpi/training/yaml_examples_equivalence_test.py
+```
+
+#### Running training
 
 Before we can run training, we need to compute the normalization statistics for the training data. Run the script below with the name of your training config (e.g., for Xense):
 

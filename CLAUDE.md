@@ -107,11 +107,24 @@ uv run examples/convert_jax_model_to_pytorch.py --checkpoint_dir <jax_checkpoint
 - **`src/openpi/serving/`**: Policy serving infrastructure (websocket server)
 
 ### Key Configuration System
-The training system uses a centralized config system in `src/openpi/training/config.py`:
+The training system supports **two** ways to define a `TrainConfig`:
+
+1. **YAML files in `configs/`** (preferred for new work):
+   - `configs/<name>.yaml` is your local, gitignored, per-user config
+   - `configs/_examples/<name>.yaml` is checked into git as a shared template
+   - Filename stem is the config name; loaded via `get_config(name)` automatically
+   - See `configs/README.md` for full schema and how to register new types
+2. **Python `_CONFIGS` list in `src/openpi/training/config.py`** (legacy):
+   - Still works; required for configs that use lambdas or `flax.nnx` filters that
+     can't be serialized to YAML (e.g. `pi0_droid`, LoRA configs with `freeze_filter`)
+   - New tasks should prefer YAML to avoid merge conflicts in the central file
+
+Core dataclasses (used by both modes):
 - **DataConfig**: Defines data processing pipelines for different datasets
 - **TrainConfig**: Defines training hyperparameters, model selection, and optimization
 - **AssetsConfig**: Manages normalization statistics and other training assets
-- Named configs are registered in `_CONFIGS` dict (e.g., `pi0_droid`, `pi05_droid`, `pi05_base_arx5_lora`)
+
+`get_config(name)` lookup order: `configs/<name>.yaml` → `configs/_examples/<name>.yaml` → `_CONFIGS_DICT[name]`.
 
 ### Policy Architecture
 Each robot platform has a dedicated policy class that handles:
@@ -129,15 +142,20 @@ Each robot platform has a dedicated policy class that handles:
 ### Adding New Robot Support
 1. Create new policy class in `src/openpi/policies/` inheriting from base policy
 2. Define input/output mappings for your robot's observation/action space
-3. Add data config in `src/openpi/training/config.py` for your dataset format
-4. Create training config linking your policy, data config, and base model
+3. Add a `DataConfigFactory` subclass in `src/openpi/training/config.py` for your dataset format
+4. Register the new class in `src/openpi/training/registry.py` so it can be referenced from YAML
+5. Create a per-task YAML in `configs/_examples/<name>.yaml` (shared) or `configs/<name>.yaml` (private)
 
 ### Fine-tuning Workflow
 1. Convert your data to LeRobot format (see examples in `examples/droid` and `examples/bi_arx5_real`)
-2. Create configs for your dataset following DROID or Xense examples in `config.py`
-3. Compute normalization stats: `scripts/compute_norm_stats.py`
-4. Train: `scripts/train.py` or `scripts/train_pytorch.py`
-5. Serve: `scripts/serve_policy.py`
+2. Create a `configs/<task_name>.yaml` — copy the closest example from `configs/_examples/`
+3. Compute normalization stats: `uv run scripts/compute_norm_stats.py --config-name <task_name>`
+4. Train: `uv run scripts/train.py <task_name> --exp-name=<run_name>`
+5. Serve: `uv run scripts/serve_policy.py policy:checkpoint --policy.config=<task_name> --policy.dir=...`
+
+⚠️ Before checking a YAML into `configs/_examples/`, scrub machine-local absolute paths
+(e.g. `/home/<you>/.../checkpoints/...`). Use upstream URLs (`gs://openpi-assets/...`)
+or paths that work for every contributor.
 
 ### JAX vs PyTorch Usage
 - **JAX**: Full feature support, mixed precision training, FSDP, LoRA, EMA weights
