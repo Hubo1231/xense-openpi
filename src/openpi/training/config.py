@@ -16,6 +16,7 @@ import tyro
 import openpi.models.model as _model
 import openpi.models.pi0_config as pi0_config
 import openpi.models.pi0_fast as pi0_fast
+import openpi.models.pi0_tactile_fastvit_config as pi0_tactile_fastvit_config
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.bi_flexiv_policy as bi_flexiv_policy
@@ -124,6 +125,22 @@ class ModelTransformFactory(GroupFactory):
                     ],
                 )
             case _model.ModelType.PI05:
+                assert isinstance(model_config, pi0_config.Pi0Config)
+                return _transforms.Group(
+                    inputs=[
+                        _transforms.InjectDefaultPrompt(self.default_prompt),
+                        _transforms.ResizeImages(224, 224),
+                        _transforms.TokenizePrompt(
+                            _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                            discrete_state_input=model_config.discrete_state_input,
+                        ),
+                        _transforms.PadStatesAndActions(model_config.action_dim),
+                    ],
+                )
+            case _model.ModelType.PI0_TACTILE | _model.ModelType.PI05_TACTILE:
+                # Tactile variants share the Pi0/Pi05 model-transform pipeline. ResizeImages
+                # is transparent to extra image keys (it resizes every dict entry), so
+                # tactile images get resized to 224×224 alongside the visual cameras.
                 assert isinstance(model_config, pi0_config.Pi0Config)
                 return _transforms.Group(
                     inputs=[
@@ -506,6 +523,64 @@ class LeRobotBiFlexivDataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
+class LeRobotBiFlexivTactileDataConfig(LeRobotBiFlexivDataConfig):
+    """LeRobotBiFlexivDataConfig + 4 tactile cameras.
+
+    Source LeRobot column names (configurable per dataset) map to model image keys:
+        observation.images.left_tactile_top     -> tactile_0_rgb
+        observation.images.left_tactile_bottom  -> tactile_1_rgb
+        observation.images.right_tactile_top    -> tactile_2_rgb
+        observation.images.right_tactile_bottom -> tactile_3_rgb
+
+    The data transform is :class:`bi_flexiv_policy.BiFlexivTactileInputs`.
+    """
+
+    repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
+        default=_transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {
+                            "head": "observation.images.head",
+                            "left_wrist": "observation.images.left_wrist",
+                            "right_wrist": "observation.images.right_wrist",
+                            "left_tactile_top": "observation.images.left_tactile_top",
+                            "left_tactile_bottom": "observation.images.left_tactile_bottom",
+                            "right_tactile_top": "observation.images.right_tactile_top",
+                            "right_tactile_bottom": "observation.images.right_tactile_bottom",
+                        },
+                        "state": "observation.state",
+                        "actions": "action",
+                        "prompt": "task",
+                    }
+                )
+            ]
+        )
+    )
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        data_transforms = _transforms.Group(
+            inputs=[bi_flexiv_policy.BiFlexivTactileInputs()],
+            outputs=[bi_flexiv_policy.BiFlexivOutputs()],
+        )
+        if self.use_delta_cartesian_actions:
+            delta_action_mask = _transforms.make_bool_mask(18, -1, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=self.repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=self.action_sequence_keys,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
@@ -738,8 +813,13 @@ _CONFIGS = [
             ),
         ),
         ema_decay=None,
-        batch_size=64,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/home/li/hubo/xense-openpi/model/pi05_base"),
+        freeze_filter=pi0_config.Pi0Config(
+              pi05=True,
+              paligemma_variant="gemma_2b_lora",
+              action_expert_variant="gemma_300m_lora",
+          ).get_freeze_filter(),
+        batch_size=2,
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/li/hubo/xense-openpi/model/pi05_base/params"),
         num_train_steps=80000,
         num_workers=2,
         fsdp_devices=1,
@@ -824,6 +904,37 @@ _CONFIGS = [
             default_prompt="Pick up each earbud case from the left stands, insert the matching earbuds, close the lid, and place the case on the middle stand",
             base_config=DataConfig(
                 prompt_from_task=True,  # Set to True for prompt by task_name
+            ),
+        ),
+        save_interval=2000,
+        keep_period=10000,
+        ema_decay=None,
+        batch_size=256,
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=20000,
+        num_workers=64,
+        fsdp_devices=8,
+    ),
+    TrainConfig(
+        name="pi05_base_bi_flexiv_earbuds_case_assembly_with_lid_operation_rtc_tactile_fastvit_h100",
+        model=pi0_tactile_fastvit_config.Pi0TactileFastVitConfig(
+            paligemma_variant="gemma_2b",
+            action_expert_variant="gemma_300m",
+            pi05=True,
+            enable_training_time_rtc=True,
+            max_delay=10,
+            tactile_encoder_name="fastvit_t12",
+            # Path to a Flax-format FastViT checkpoint produced by
+            # scripts/convert_fastvit_torch_to_flax.py. Set to None to train the
+            # encoder from scratch.
+            tactile_pretrained_path="checkpoint/fastvit_t12_apple_dist_in1k_flax/params.safetensors",
+        ),
+        data=LeRobotBiFlexivTactileDataConfig(
+            repo_id="Xense/earbuds_case_assembly_with_lid_operation",
+            use_delta_cartesian_actions=True,
+            default_prompt="Pick up each earbud case from the left stands, insert the matching earbuds, close the lid, and place the case on the middle stand",
+            base_config=DataConfig(
+                prompt_from_task=True,
             ),
         ),
         save_interval=2000,

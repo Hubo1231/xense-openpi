@@ -23,10 +23,14 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
     """OpenPI environment for BiFlexiv Rizon4 RT dual-arm robot.
 
     Camera name mapping (real → policy):
-        head        -> head
-        left_wrist  -> left_wrist
-        right_wrist -> right_wrist
-        (tactile cameras are silently ignored by the policy)
+        head                 -> head
+        left_wrist           -> left_wrist
+        right_wrist          -> right_wrist
+        left_tactile_top     -> left_tactile_top      (only when tactile sensors enabled)
+        left_tactile_bottom  -> left_tactile_bottom   (only when tactile sensors enabled)
+        right_tactile_top    -> right_tactile_top     (only when tactile sensors enabled)
+        right_tactile_bottom -> right_tactile_bottom  (only when tactile sensors enabled)
+    Depth streams are always dropped.
     """
 
     def __init__(
@@ -42,6 +46,7 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
         render_height: int = 224,
         render_width: int = 224,
         setup_robot: bool = True,
+        tactile_camera_mapping: dict[str, str] | None = None,
     ) -> None:
         self._env = _real_env.BiFlexivRizon4RTRealEnv(
             bi_mount_type=bi_mount_type,
@@ -53,6 +58,7 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
             enable_tactile_sensors=enable_tactile_sensors,
             log_level=log_level,
             setup_robot=setup_robot,
+            tactile_camera_mapping=tactile_camera_mapping,
         )
         self._render_height = render_height
         self._render_width = render_width
@@ -77,7 +83,8 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
         processed_images = {}
 
         for cam_name, img in obs["images"].items():
-            if "_depth" in cam_name or "tactile" in cam_name:
+            # Drop depth streams; tactile streams are kept and resized just like RGB.
+            if "_depth" in cam_name:
                 continue
 
             batch = np.expand_dims(img, axis=0)
@@ -86,8 +93,13 @@ class BiFlexivRizon4RTEnvironment(_environment.Environment):
             processed_images[cam_name] = einops.rearrange(resized, "h w c -> c h w")
 
         # Raw images (original resolution HWC) passed through for recording.
-        # Policy cameras only — tactile sensors excluded.
-        raw_images = {cam: img for cam, img in obs["images"].items() if "_depth" not in cam and "tactile" not in cam}
+        # Only visual policy cameras are recorded; tactile streams are excluded to
+        # keep recordings small. Adjust here if you need tactile recordings too.
+        raw_images = {
+            cam: img
+            for cam, img in obs["images"].items()
+            if "_depth" not in cam and "tactile" not in cam
+        }
 
         return {
             "state": obs["qpos"],

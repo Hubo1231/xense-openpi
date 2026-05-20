@@ -18,8 +18,18 @@ import numpy as np
 
 logger = get_logger("BiFlexivRizon4RTRealEnv")
 
-# Policy-facing camera names (must match BiFlexivInputs.EXPECTED_CAMERAS)
-_POLICY_CAMERAS = ("head", "left_wrist", "right_wrist")
+# Default policy-facing camera names (must match BiFlexivInputs / BiFlexivTactileInputs
+# EXPECTED_CAMERAS). Tactile cameras are included so that the policy can use the 4-
+# tactile FastViT branch when available; if the robot does not expose them they are
+# silently dropped here (the policy-side BiFlexivTactileInputs zero-fills missing
+# images with image_mask=False).
+_DEFAULT_VISUAL_CAMERAS = ("head", "left_wrist", "right_wrist")
+_DEFAULT_TACTILE_CAMERAS = (
+    "left_tactile_top",
+    "left_tactile_bottom",
+    "right_tactile_top",
+    "right_tactile_bottom",
+)
 
 
 class BiFlexivRizon4RTRealEnv:
@@ -44,6 +54,7 @@ class BiFlexivRizon4RTRealEnv:
         enable_tactile_sensors: bool = True,
         log_level: str = "INFO",
         setup_robot: bool = True,
+        tactile_camera_mapping: dict[str, str] | None = None,
     ):
         self.config = BiFlexivRizon4RTConfig(
             bi_mount_type=bi_mount_type,
@@ -56,6 +67,13 @@ class BiFlexivRizon4RTRealEnv:
             log_level=log_level,
         )
         self.robot = make_robot_from_config(self.config)
+        self._enable_tactile_sensors = enable_tactile_sensors
+        # Mapping from policy-facing camera name -> robot-side camera key.
+        # Identity mapping by default; users override via the CLI in main.py.
+        default_map = {name: name for name in _DEFAULT_TACTILE_CAMERAS}
+        if tactile_camera_mapping:
+            default_map.update(tactile_camera_mapping)
+        self._tactile_camera_mapping = default_map
 
         if setup_robot:
             self.setup_robot()
@@ -83,13 +101,27 @@ class BiFlexivRizon4RTRealEnv:
         return np.array(left_tcp + right_tcp + [obs["left_gripper.pos"], obs["right_gripper.pos"]], dtype=np.float32)
 
     def get_images(self, obs: dict) -> dict:
-        """Extract camera images from observation dict."""
-        images = {}
-        for cam_name in _POLICY_CAMERAS:
+        """Extract camera images from observation dict.
+
+        Visual cameras are passed through under their canonical names.
+        Tactile cameras are renamed from the robot-side key (see
+        ``tactile_camera_mapping``) to the policy-side key, so the OpenPI policy
+        can see ``left_tactile_top``/``left_tactile_bottom``/``right_tactile_top``/
+        ``right_tactile_bottom`` regardless of how lerobot exposes them.
+        """
+        images: dict = {}
+        for cam_name in _DEFAULT_VISUAL_CAMERAS:
             if cam_name in obs:
                 images[cam_name] = obs[cam_name]
             else:
                 logger.debug(f"Camera {cam_name} not found in observation")
+
+        if self._enable_tactile_sensors:
+            for policy_name, robot_name in self._tactile_camera_mapping.items():
+                if robot_name in obs:
+                    images[policy_name] = obs[robot_name]
+                else:
+                    logger.debug(f"Tactile camera {robot_name} (policy={policy_name}) not found")
         return images
 
     def get_observation(self) -> dict:
