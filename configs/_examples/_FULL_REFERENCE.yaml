@@ -48,8 +48,11 @@ model:
   dtype: bfloat16              # bfloat16 or float32
 
   # ---- Pi0Config-specific ----
-  paligemma_variant: gemma_2b       # gemma_2b | dummy
-  action_expert_variant: gemma_300m # gemma_300m | gemma_2b | dummy
+  paligemma_variant: gemma_2b       # gemma_2b | gemma_2b_lora | dummy
+  action_expert_variant: gemma_300m # gemma_300m | gemma_300m_lora | gemma_2b | dummy
+  # Setting either variant to a *_lora value triggers automatic LoRA freeze_filter
+  # derivation. No need to write freeze_filter explicitly. See the LoRA example
+  # at pi05_base_bi_flexiv_pack_6_cosmetic_bottles_lora.yaml.
   pi05: false                       # true ⇒ pi0.5 model; required for `discrete_state_input` and RTC
   discrete_state_input: null        # null = follow pi05 default; only valid when pi05=true
   enable_training_time_rtc: false   # Real-Time Control fine-tune mode (pi0.5 only)
@@ -233,7 +236,13 @@ fsdp_devices: 1               # 1 = pure data parallel; >1 = FSDP sharding acros
 # freeze_filter — LoRA / partial-weight freezing
 # ---------------------------------------------------------------------------
 #
-# NOT SETTABLE FROM YAML. freeze_filter takes a flax.nnx filter tree
-# (e.g. `nnx.All(PathRegex(".*llm.*"), Not(PathRegex(".*lora.*")))`) which
-# can't be serialized. LoRA-style configs must stay in _CONFIGS for now.
-# See docs/yaml_config_changelog.md for the rationale and open issue.
+# `freeze_filter` itself takes a flax.nnx filter tree which can't be
+# expressed as YAML directly. For LoRA configs, *do not write it manually*.
+# Set `paligemma_variant` and/or `action_expert_variant` to a `*_lora`
+# variant (e.g. `gemma_2b_lora`, `gemma_300m_lora`) and yaml_loader will
+# call `Pi0Config.get_freeze_filter()` automatically. See
+# `configs/_examples/pi05_base_bi_flexiv_pack_6_cosmetic_bottles_lora.yaml`
+# for a worked LoRA example.
+#
+# If you need a freeze pattern that isn't derivable from variant strings
+# (uncommon), the config must stay in _CONFIGS for now.

@@ -143,7 +143,12 @@ entries **cannot** be expressed as YAML and stay in Python:
 - `pi05_base_bi_flexiv_newbalacne_shoe_insole_retrieval_and_packing_0515_h100`
 - `pi05_base_bi_flexiv_earbuds_case_insertion_teleop_rtc_0520_a100`
 - `pi05_base_bi_flexiv_assemble_box_with_phone_stand_lora_0430_merged_fixed_h100`
-- `pi05_base_bi_flexiv_assemble_box_with_phone_stand_lora_0422_merged_fixed_h100`
+- `pi05_base_bi_flexiv_pack_6_cosmetic_bottles_lora` — **true LoRA config**,
+  uses the auto-derived freeze_filter described below
+
+The `_0422_merged_fixed_h100` config is still in `_CONFIGS` but is not
+mirrored to `_examples/`: the name has `_lora` in it but the actual config
+is full fine-tuning, which is misleading. New users should not copy it.
 
 ### Stay in `_CONFIGS` (11)
 
@@ -253,9 +258,13 @@ If you want to share the config with the team later:
   we could add an OmegaConf env-var interpolation: `${env:PI05_BASE_CKPT:gs://...}`.
   Not done in this PR.
 
-- **LoRA configs still in Python.** `nnx.All(...)` freeze filters can't easily
-  go to YAML. If LoRA becomes the dominant workflow, we'll want a higher-level
-  schema for "freeze pattern" instead of exposing the flax filter tree directly.
+- **LoRA configs now work in YAML.** The follow-up change auto-derives
+  `freeze_filter` from `model.paligemma_variant` / `model.action_expert_variant`
+  when either contains `lora`. Internally it calls `Pi0Config.get_freeze_filter()`,
+  which is exactly what every `_CONFIGS` LoRA entry did by hand. YAML authors
+  just set the variant strings and `yaml_loader` fills in the rest. Configs
+  whose freeze pattern doesn't follow the variant-string convention (rare)
+  still need to stay in `_CONFIGS`.
 
 - **No CLI-driven `train.py @configs/foo.yaml` yet.** Today you load YAML by
   passing the bare name (`train.py shoe_insole_...`), which works because

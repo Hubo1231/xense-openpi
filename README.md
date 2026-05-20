@@ -168,6 +168,15 @@ slot (`model.type`, `data.type`, `weight_loader.type`, etc.), and the current
 default for each value. Open it alongside your real config when you need to
 look up "what does field X do" or "what else can I put in `data.type`".
 
+**LoRA fine-tuning:** set `model.paligemma_variant` and/or
+`model.action_expert_variant` to a `*_lora` value (e.g. `gemma_2b_lora`,
+`gemma_300m_lora`). The YAML loader detects the `lora` substring and
+auto-derives the correct `freeze_filter` from
+`Pi0Config.get_freeze_filter()` — you don't need to (and can't) write a
+flax filter tree in YAML. See
+[`pi05_base_bi_flexiv_pack_6_cosmetic_bottles_lora.yaml`](configs/_examples/pi05_base_bi_flexiv_pack_6_cosmetic_bottles_lora.yaml)
+for a complete LoRA example.
+
 ```yaml
 # configs/my_task.yaml  (filename stem = config name; do not put `name:` inside)
 
