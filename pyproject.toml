@@ -41,6 +41,7 @@ dependencies = [
     "chex",
     "dm_env",
     "pytest",
+    "omegaconf>=2.3.0",
 ]
 
 
