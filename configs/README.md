@@ -5,7 +5,7 @@ self-contained representation of a `TrainConfig` and can be loaded by name:
 
 ```bash
 # YAML file: configs/_examples/pi05_base_bi_flexiv_shoe_insole_..._h100.yaml
-uv run scripts/train.py pi05_base_bi_flexiv_shoe_insole_..._h100 --exp-name=0519
+python scripts/train.py pi05_base_bi_flexiv_shoe_insole_..._h100 --exp-name=0519
 ```
 
 ## What's where

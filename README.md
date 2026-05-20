@@ -57,11 +57,11 @@ mamba activate lerobot-xense
 
 # 1. Install the client package (xense-client, used by robot runtimes)
 cd packages/xense-client
-GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+GIT_LFS_SKIP_SMUDGE=1 pip install -e .
 
 # 2. Install the main openpi package
 cd ../..
-GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+GIT_LFS_SKIP_SMUDGE=1 pip install -e .
 ```
 
 ## Model Checkpoints
@@ -209,9 +209,9 @@ fsdp_devices: 8
 Then use it exactly like any other config:
 
 ```bash
-uv run scripts/compute_norm_stats.py --config-name my_task
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py my_task --exp-name=run_0520 --overwrite
-uv run scripts/serve_policy.py policy:checkpoint --policy.config=my_task --policy.dir=checkpoints/my_task/run_0520/<step>
+python scripts/compute_norm_stats.py --config-name my_task
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 python scripts/train.py my_task --exp-name=run_0520 --overwrite
+python scripts/serve_policy.py policy:checkpoint --policy.config=my_task --policy.dir=checkpoints/my_task/run_0520/<step>
 ```
 
 ⚠️ Before committing a YAML into `configs/_examples/`, scrub any machine-local
@@ -238,13 +238,13 @@ pytest src/openpi/training/yaml_examples_equivalence_test.py
 Before we can run training, we need to compute the normalization statistics for the training data. Run the script below with the name of your training config (e.g., for Xense):
 
 ```bash
-uv run scripts/compute_norm_stats.py --config-name pi05_base_arx5_lora
+python scripts/compute_norm_stats.py --config-name pi05_base_arx5_lora
 ```
 
 Now we can kick off training with the following command (the `--overwrite` flag is used to overwrite existing checkpoints if you rerun fine-tuning with the same config):
 
 ```bash
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_base_arx5_lora --exp-name=my_experiment --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 python scripts/train.py pi05_base_arx5_lora --exp-name=my_experiment --overwrite
 ```
 
 The command will log training progress to the console and save checkpoints to the `checkpoints` directory. You can also monitor training progress on the Weights & Biases dashboard. For maximally using the GPU memory, set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` before running training -- this enables JAX to use up to 90% of the GPU memory (vs. the default of 75%).
@@ -301,7 +301,7 @@ This overwrites several files in the transformers library with necessary model c
 To convert a JAX model checkpoint to PyTorch format:
 
 ```bash
-uv run examples/convert_jax_model_to_pytorch.py \
+python examples/convert_jax_model_to_pytorch.py \
     --checkpoint_dir /path/to/jax/checkpoint \
     --config_name <config name> \
     --output_path /path/to/converted/pytorch/checkpoint
@@ -331,7 +331,7 @@ action_chunk = policy.infer(example)["actions"]
 The policy server works identically with PyTorch models - just point to the converted checkpoint directory:
 
 ```bash
-uv run scripts/serve_policy.py policy:checkpoint \
+python scripts/serve_policy.py policy:checkpoint \
     --policy.config=pi05_droid \
     --policy.dir=/path/to/converted/pytorch/checkpoint
 ```
@@ -343,7 +343,7 @@ To finetune a model in PyTorch:
 1. Convert the JAX base model to PyTorch format:
 
    ```bash
-   uv run examples/convert_jax_model_to_pytorch.py \
+   python examples/convert_jax_model_to_pytorch.py \
        --config_name <config name> \
        --checkpoint_dir /path/to/jax/base/model \
        --output_path /path/to/pytorch/base/model
@@ -355,21 +355,21 @@ To finetune a model in PyTorch:
 
 ```bash
 # Single GPU training:
-uv run scripts/train_pytorch.py <config_name> --exp_name <run_name> --save_interval <interval>
+python scripts/train_pytorch.py <config_name> --exp_name <run_name> --save_interval <interval>
 
 # Example:
-uv run scripts/train_pytorch.py debug --exp_name pytorch_test
-uv run scripts/train_pytorch.py debug --exp_name pytorch_test --resume  # Resume from latest checkpoint
+python scripts/train_pytorch.py debug --exp_name pytorch_test
+python scripts/train_pytorch.py debug --exp_name pytorch_test --resume  # Resume from latest checkpoint
 
 # Multi-GPU training (single node):
-uv run torchrun --standalone --nnodes=1 --nproc_per_node=<num_gpus> scripts/train_pytorch.py <config_name> --exp_name <run_name>
+torchrun --standalone --nnodes=1 --nproc_per_node=<num_gpus> scripts/train_pytorch.py <config_name> --exp_name <run_name>
 
 # Example using debug config:
-uv run torchrun --standalone --nnodes=1 --nproc_per_node=2 scripts/train_pytorch.py debug --exp_name pytorch_ddp_test
-uv run torchrun --standalone --nnodes=1 --nproc_per_node=2 scripts/train_pytorch.py debug --exp_name pytorch_ddp_test --resume
+torchrun --standalone --nnodes=1 --nproc_per_node=2 scripts/train_pytorch.py debug --exp_name pytorch_ddp_test
+torchrun --standalone --nnodes=1 --nproc_per_node=2 scripts/train_pytorch.py debug --exp_name pytorch_ddp_test --resume
 
 # Multi-Node Training:
-uv run torchrun \
+torchrun \
     --nnodes=<num_nodes> \
     --nproc_per_node=<gpus_per_node> \
     --node_rank=<rank_of_node> \
@@ -400,13 +400,13 @@ We will collect common issues and their solutions here. If you encounter an issu
 
 | Issue                                  | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency conflicts                   | Make sure you are in the `lerobot-xense` mamba environment, then run `GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .` to install openpi.                                                                                                                                                                                                                                                                                                                                                                                 |
+| Dependency conflicts                   | Make sure you are in the `lerobot-xense` mamba environment, then run `GIT_LFS_SKIP_SMUDGE=1 pip install -e .` to install openpi.                                                                                                                                                                                                                                                                                                                                                                                 |
 | Training runs out of GPU memory        | Make sure you set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` (or higher) before running training to allow JAX to use more GPU memory. You can also use `--fsdp-devices <n>` where `<n>` is your number of GPUs, to enable [fully-sharded data parallelism](https://engineering.fb.com/2021/07/15/open-source/fsdp/), which reduces memory usage in exchange for slower training (the amount of slowdown depends on your particular setup). If you are still running out of memory, you may way to consider disabling EMA. |
 | Policy server connection errors        | Check that the server is running and listening on the expected port. Verify network connectivity and firewall settings between client and server.                                                                                                                                                                                                                                                                                                                                                                   |
 | Missing norm stats error when training | Run `scripts/compute_norm_stats.py` with your config name before starting training.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Dataset download fails                 | Check your internet connection. For HuggingFace datasets, ensure you're logged in (`huggingface-cli login`).                                                                                                                                                                                                                                                                                                                                                                                                        |
-| CUDA/GPU errors                        | Verify NVIDIA drivers are installed correctly. For Docker, ensure nvidia-container-toolkit is installed. Check GPU compatibility. You do NOT need CUDA libraries installed at a system level --- they will be installed via uv. You may even want to try _uninstalling_ system CUDA libraries if you run into CUDA issues, since system libraries can sometimes cause conflicts.                                                                                                                                    |
-| Import errors when running examples    | Make sure you've installed all dependencies with `uv sync`. Some examples may have additional requirements listed in their READMEs.                                                                                                                                                                                                                                                                                                                                                                                 |
+| CUDA/GPU errors                        | Verify NVIDIA drivers are installed correctly. For Docker, ensure nvidia-container-toolkit is installed. Check GPU compatibility. You do NOT need CUDA libraries installed at a system level --- they will be installed via pip as part of openpi's dependencies. You may even want to try _uninstalling_ system CUDA libraries if you run into CUDA issues, since system libraries can sometimes cause conflicts.                                                                                                  |
+| Import errors when running examples    | Make sure you've installed all dependencies with `pip install -e .`. Some examples may have additional requirements listed in their READMEs.                                                                                                                                                                                                                                                                                                                                                                                 |
 | Action dimensions mismatch             | Verify your data processing transforms match the expected input/output dimensions of your robot. Check the action space definitions in your policy classes.                                                                                                                                                                                                                                                                                                                                                         |
 | Diverging training loss                | Check the `q01`, `q99`, and `std` values in `norm_stats.json` for your dataset. Certain dimensions that are rarely used can end up with very small `q01`, `q99`, or `std` values, leading to huge states and actions after normalization. You can manually adjust the norm stats as a workaround.                                                                                                                                                                                                                   |
 

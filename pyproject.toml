@@ -48,7 +48,9 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/Physical-Intelligence/openpi"
 
-[dependency-groups]
+[project.optional-dependencies]
+# Install with `pip install -e ".[dev]"` etc.
+# (Kept in sync with the prior `[dependency-groups]` table that uv-only flows used.)
 dev = [
     "pytest>=8.3.4",
     "ruff>=0.8.6",

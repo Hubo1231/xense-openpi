@@ -29,14 +29,16 @@ The codebase supports both JAX and PyTorch implementations, with JAX being the p
 git submodule update --init --recursive
 
 # Environment setup
-GIT_LFS_SKIP_SMUDGE=1 uv sync
-GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
+GIT_LFS_SKIP_SMUDGE=1 pip install -e .
+GIT_LFS_SKIP_SMUDGE=1 pip install -e .
 ```
 
 ### PyTorch Setup (if using PyTorch models)
 ```bash
-# Apply transformers patches (required for PyTorch)
-cp -r ./src/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.11/site-packages/transformers/
+# Apply transformers patches (required for PyTorch). Resolve the target path dynamically
+# so this works whether you're in a mamba/conda env or a venv.
+cp -r ./src/openpi/models_pytorch/transformers_replace/* \
+    "$(python -c 'import transformers, os; print(os.path.dirname(transformers.__file__))')/"
 ```
 
 ### Linting and Formatting
@@ -66,34 +68,34 @@ pytest src/path/to/test_file.py
 #### JAX Training
 ```bash
 # Compute normalization statistics (required before training)
-uv run scripts/compute_norm_stats.py --config-name <config_name>
+python scripts/compute_norm_stats.py --config-name <config_name>
 
 # Train model
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config_name> --exp-name=<experiment_name>
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 python scripts/train.py <config_name> --exp-name=<experiment_name>
 
 # Train with FSDP (for memory efficiency)
-uv run scripts/train.py <config_name> --exp-name=<experiment_name> --fsdp-devices <num_gpus>
+python scripts/train.py <config_name> --exp-name=<experiment_name> --fsdp-devices <num_gpus>
 ```
 
 #### PyTorch Training
 ```bash
 # Single GPU
-uv run scripts/train_pytorch.py <config_name> --exp_name <run_name>
+python scripts/train_pytorch.py <config_name> --exp_name <run_name>
 
 # Multi-GPU (single node)
-uv run torchrun --standalone --nnodes=1 --nproc_per_node=<num_gpus> scripts/train_pytorch.py <config_name> --exp_name <run_name>
+torchrun --standalone --nnodes=1 --nproc_per_node=<num_gpus> scripts/train_pytorch.py <config_name> --exp_name <run_name>
 
 # Resume training
-uv run scripts/train_pytorch.py <config_name> --exp_name <run_name> --resume
+python scripts/train_pytorch.py <config_name> --exp_name <run_name> --resume
 ```
 
 ### Inference and Serving
 ```bash
 # Serve policy (for inference)
-uv run scripts/serve_policy.py policy:checkpoint --policy.config=<config_name> --policy.dir=<checkpoint_dir>
+python scripts/serve_policy.py policy:checkpoint --policy.config=<config_name> --policy.dir=<checkpoint_dir>
 
 # Convert JAX model to PyTorch
-uv run examples/convert_jax_model_to_pytorch.py --checkpoint_dir <jax_checkpoint> --config_name <config> --output_path <pytorch_output>
+python examples/convert_jax_model_to_pytorch.py --checkpoint_dir <jax_checkpoint> --config_name <config> --output_path <pytorch_output>
 ```
 
 ## Architecture Overview
@@ -149,9 +151,9 @@ Each robot platform has a dedicated policy class that handles:
 ### Fine-tuning Workflow
 1. Convert your data to LeRobot format (see examples in `examples/droid` and `examples/bi_arx5_real`)
 2. Create a `configs/<task_name>.yaml` — copy the closest example from `configs/_examples/`
-3. Compute normalization stats: `uv run scripts/compute_norm_stats.py --config-name <task_name>`
-4. Train: `uv run scripts/train.py <task_name> --exp-name=<run_name>`
-5. Serve: `uv run scripts/serve_policy.py policy:checkpoint --policy.config=<task_name> --policy.dir=...`
+3. Compute normalization stats: `python scripts/compute_norm_stats.py --config-name <task_name>`
+4. Train: `python scripts/train.py <task_name> --exp-name=<run_name>`
+5. Serve: `python scripts/serve_policy.py policy:checkpoint --policy.config=<task_name> --policy.dir=...`
 
 ⚠️ Before checking a YAML into `configs/_examples/`, scrub machine-local absolute paths
 (e.g. `/home/<you>/.../checkpoints/...`). Use upstream URLs (`gs://openpi-assets/...`)
