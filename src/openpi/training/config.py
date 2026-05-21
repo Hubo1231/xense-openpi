@@ -860,7 +860,7 @@ _CONFIGS = [
         fsdp_devices=8,
     ),
     TrainConfig(
-        name="pi05_base_bi_flexiv_newbalacne_shoe_insole_retrieval_and_packing_0515_h100",
+        name="pi05_base_bi_flexiv_newbalacne_shoe_insole_retrieval_and_packing_0520_h100",
         model=pi0_config.Pi0Config(
             paligemma_variant="gemma_2b",
             action_expert_variant="gemma_300m",
@@ -869,7 +869,7 @@ _CONFIGS = [
             max_delay=10,
         ),
         data=LeRobotBiFlexivDataConfig(
-            repo_id="Xense/newbalance_shoe_insole_retrieval_and_packing0515",
+            repo_id="Xense/newbalance_shoe_insole_retrieval_and_packing_0520",
             use_delta_cartesian_actions=True,
             default_prompt="Open the shoe tongue, take the insole out of the shoe, put the insole back into the shoe, and pack the shoe into the shoebox.",
             base_config=DataConfig(
@@ -879,7 +879,7 @@ _CONFIGS = [
         ema_decay=None,
         batch_size=256,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        num_train_steps=40_000,
+        num_train_steps=60_000,
         num_workers=64,
         fsdp_devices=8,
     ),
