@@ -915,7 +915,7 @@ _CONFIGS = [
         fsdp_devices=8,
     ),
     TrainConfig(
-        name="pi05_base_bi_flexiv_earbuds_case_assembly_with_lid_operation_rtc_tactile_fastvit_h100",
+        name="pi05_base_bi_flexiv_earbuds_case_assembly_with_lid_operation_rtc_tactile_fastvit_a100",
         model=pi0_tactile_fastvit_config.Pi0TactileFastVitConfig(
             paligemma_variant="gemma_2b_lora",
             action_expert_variant="gemma_300m_lora",
@@ -945,7 +945,13 @@ _CONFIGS = [
               action_expert_variant="gemma_300m_lora",
           ).get_freeze_filter(),
         batch_size=2,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/home/li/hubo/xense-openpi/model/pi05_base/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/home/li/hubo/xense-openpi/model/pi05_base/params",
+            # pi05_base has no tactile branches; allow them to be missing so the
+            # freshly-initialized tactile_encoder (FastViT pretrained) and the
+            # random-init tactile_proj survive the merge.
+            missing_regex=r".*(lora|tactile_encoder|tactile_proj).*",
+        ),
         num_train_steps=20000,
         num_workers=2,
         fsdp_devices=1,
