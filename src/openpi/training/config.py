@@ -526,13 +526,12 @@ class LeRobotBiFlexivDataConfig(DataConfigFactory):
 class LeRobotBiFlexivTactileDataConfig(LeRobotBiFlexivDataConfig):
     """LeRobotBiFlexivDataConfig + 4 tactile cameras.
 
-    Source LeRobot column names (configurable per dataset) map to model image keys:
-        observation.images.left_tactile_top     -> tactile_0_rgb
-        observation.images.left_tactile_bottom  -> tactile_1_rgb
-        observation.images.right_tactile_top    -> tactile_2_rgb
-        observation.images.right_tactile_bottom -> tactile_3_rgb
-
-    The data transform is :class:`bi_flexiv_policy.BiFlexivTactileInputs`.
+    Source LeRobot column names map to model image keys via the intermediate
+    top/bottom names consumed by :class:`bi_flexiv_policy.BiFlexivTactileInputs`:
+        observation.images.left_tactile_0  -> left_tactile_top    -> tactile_0_rgb
+        observation.images.left_tactile_1  -> left_tactile_bottom -> tactile_1_rgb
+        observation.images.right_tactile_0 -> right_tactile_top   -> tactile_2_rgb
+        observation.images.right_tactile_1 -> right_tactile_bottom-> tactile_3_rgb
     """
 
     repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
@@ -544,10 +543,10 @@ class LeRobotBiFlexivTactileDataConfig(LeRobotBiFlexivDataConfig):
                             "head": "observation.images.head",
                             "left_wrist": "observation.images.left_wrist",
                             "right_wrist": "observation.images.right_wrist",
-                            "left_tactile_top": "observation.images.left_tactile_top",
-                            "left_tactile_bottom": "observation.images.left_tactile_bottom",
-                            "right_tactile_top": "observation.images.right_tactile_top",
-                            "right_tactile_bottom": "observation.images.right_tactile_bottom",
+                            "left_tactile_top": "observation.images.left_tactile_0",
+                            "left_tactile_bottom": "observation.images.left_tactile_1",
+                            "right_tactile_top": "observation.images.right_tactile_0",
+                            "right_tactile_bottom": "observation.images.right_tactile_1",
                         },
                         "state": "observation.state",
                         "actions": "action",
@@ -918,8 +917,8 @@ _CONFIGS = [
     TrainConfig(
         name="pi05_base_bi_flexiv_earbuds_case_assembly_with_lid_operation_rtc_tactile_fastvit_h100",
         model=pi0_tactile_fastvit_config.Pi0TactileFastVitConfig(
-            paligemma_variant="gemma_2b",
-            action_expert_variant="gemma_300m",
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
             pi05=True,
             enable_training_time_rtc=True,
             max_delay=10,
@@ -927,12 +926,12 @@ _CONFIGS = [
             # Path to a Flax-format FastViT checkpoint produced by
             # scripts/convert_fastvit_torch_to_flax.py. Set to None to train the
             # encoder from scratch.
-            tactile_pretrained_path="checkpoint/fastvit_t12_apple_dist_in1k_flax/params.safetensors",
+            tactile_pretrained_path="model/fastvit_t12_apple_dist_in1k_flax/params.safetensors",
         ),
         data=LeRobotBiFlexivTactileDataConfig(
-            repo_id="Xense/earbuds_case_assembly_with_lid_operation",
+            repo_id="earbud_case_insertion_teleop_0515",
             use_delta_cartesian_actions=True,
-            default_prompt="Pick up each earbud case from the left stands, insert the matching earbuds, close the lid, and place the case on the middle stand",
+            default_prompt="Pick up each earbud case from the left stands, insert the matching earbuds, close the lid, and place the case in the box.",
             base_config=DataConfig(
                 prompt_from_task=True,
             ),
@@ -940,11 +939,16 @@ _CONFIGS = [
         save_interval=2000,
         keep_period=10000,
         ema_decay=None,
-        batch_size=256,
-        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        freeze_filter=pi0_config.Pi0Config(
+              pi05=True,
+              paligemma_variant="gemma_2b_lora",
+              action_expert_variant="gemma_300m_lora",
+          ).get_freeze_filter(),
+        batch_size=2,
+        weight_loader=weight_loaders.CheckpointWeightLoader("/home/li/hubo/xense-openpi/model/pi05_base/params"),
         num_train_steps=20000,
-        num_workers=64,
-        fsdp_devices=8,
+        num_workers=2,
+        fsdp_devices=1,
     ),
     TrainConfig(
         name="debug_pi05",
