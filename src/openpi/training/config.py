@@ -952,7 +952,7 @@ _CONFIGS = [
             # random-init tactile_proj survive the merge.
             missing_regex=r".*(lora|tactile_encoder|tactile_proj).*",
         ),
-        num_train_steps=20000,
+        num_train_steps=40000,
         num_workers=2,
         fsdp_devices=1,
     ),
