@@ -935,8 +935,8 @@ _CONFIGS = [
     TrainConfig(
         name="pi05_base_bi_flexiv_earbuds_case_assembly_with_lid_operation_rtc_tactile_fastvit_a100",
         model=pi0_tactile_fastvit_config.Pi0TactileFastVitConfig(
-            paligemma_variant="gemma_2b_lora",
-            action_expert_variant="gemma_300m_lora",
+            paligemma_variant="gemma_2b",
+            action_expert_variant="gemma_300m",
             pi05=True,
             enable_training_time_rtc=True,
             max_delay=10,
@@ -954,15 +954,10 @@ _CONFIGS = [
                 prompt_from_task=True,
             ),
         ),
-        save_interval=2000,
+        save_interval=5000,
         keep_period=10000,
         ema_decay=None,
-        freeze_filter=pi0_config.Pi0Config(
-              pi05=True,
-              paligemma_variant="gemma_2b_lora",
-              action_expert_variant="gemma_300m_lora",
-          ).get_freeze_filter(),
-        batch_size=2,
+        batch_size=256,
         weight_loader=weight_loaders.CheckpointWeightLoader(
             "/home/li/hubo/xense-openpi/model/pi05_base/params",
             # pi05_base has no tactile branches; allow them to be missing so the
@@ -971,8 +966,8 @@ _CONFIGS = [
             missing_regex=r".*(lora|tactile_encoder|tactile_proj).*",
         ),
         num_train_steps=40000,
-        num_workers=2,
-        fsdp_devices=1,
+        num_workers=64,
+        fsdp_devices=8,
     ),
     TrainConfig(
         name="debug_pi05",
